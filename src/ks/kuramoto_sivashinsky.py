@@ -1,4 +1,5 @@
 import torch
+import numpy as np
 
 
 class DifferentiableKS:
@@ -34,7 +35,6 @@ class DifferentiableKS:
             (self.exp_lin - 1 - self.L_mat * dt) / (dt * self.L_mat**2),
         )
 
-    # Step function for temporal evolution, using exponential timestepping for linear tearms and RK2 for nonlinear terms
     def etrk2(self, u):
         if self.dealiasing:
             u = self.dealias(u)
@@ -64,3 +64,18 @@ class DifferentiableKS:
             * torch.arange(0, self.resolution, device=self.device)
             / self.resolution
         )
+
+    def get_trajectory(
+        self, u_init: torch.Tensor | None, num_steps: int
+    ) -> list[torch.Tensor]:
+        if u_init is None:
+            x = self.get_1d_grid()
+            u_init = torch.cos(2 * x * np.pi / self.domain_size) + 0.1 * torch.cos(
+                2 * np.pi * x / self.domain_size
+            ) * (1 - 2 * torch.sin(2 * np.pi * x / self.domain_size))
+        u_traj = [u_init]
+        u_iter = u_init
+        for i in range(num_steps):
+            u_iter = self.etrk2(u_iter)
+            u_traj.append(u_iter)
+        return u_traj
