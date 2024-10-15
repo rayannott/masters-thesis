@@ -64,15 +64,18 @@ class DifferentiableKS:
             * torch.arange(0, self.resolution, device=self.device)
             / self.resolution
         )
+    
+    def get_init(self) -> torch.Tensor:
+        x = self.get_1d_grid()
+        return torch.cos(2 * x * np.pi / self.domain_size) + 0.1 * torch.cos(
+            2 * np.pi * x / self.domain_size
+        ) * (1 - 2 * torch.sin(2 * np.pi * x / self.domain_size))
 
     def get_trajectory(
         self, u_init: torch.Tensor | None, num_steps: int
     ) -> list[torch.Tensor]:
         if u_init is None:
-            x = self.get_1d_grid()
-            u_init = torch.cos(2 * x * np.pi / self.domain_size) + 0.1 * torch.cos(
-                2 * np.pi * x / self.domain_size
-            ) * (1 - 2 * torch.sin(2 * np.pi * x / self.domain_size))
+            u_init = self.get_init()
         u_traj = [u_init]
         u_iter = u_init
         for i in range(num_steps):
