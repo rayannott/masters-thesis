@@ -21,6 +21,11 @@ def train_loop(dataloader, model, loss_fn, optimizer, device) -> float:
 def train_loop_with_unrolling(
     dataloader_with_unrolling, model, loss_fn, optimizer, device
 ) -> float:
+    horizon_size = dataloader_with_unrolling.dataset.__dict__.get(
+        "unrolling_horizon", 1
+    )
+    if horizon_size == 1:
+        return train_loop(dataloader_with_unrolling, model, loss_fn, optimizer, device)
     model.train()
     num_batches = len(dataloader_with_unrolling)
     acc_train_loss = 0
@@ -28,7 +33,7 @@ def train_loop_with_unrolling(
     for input_val, next_steps_true in dataloader_with_unrolling:
         input_val, next_steps_true = input_val.to(device), next_steps_true.to(device)
         next_steps_pred = [input_val]
-        for _ in range(dataloader_with_unrolling.dataset.get_horizon_size()):
+        for _ in range(horizon_size):
             next_steps_pred.append(model(next_steps_pred[-1]))
         next_steps_pred_torch = torch.concat(next_steps_pred[1:], dim=1)
         loss = loss_fn(next_steps_pred_torch, next_steps_true)
@@ -37,7 +42,7 @@ def train_loop_with_unrolling(
         loss.backward()
         optimizer.step()
         optimizer.zero_grad()
-    return acc_train_loss / num_batches
+    return acc_train_loss / num_batches / horizon_size
 
 
 def test_loop(dataloader, model, loss_fn, device) -> float:
@@ -56,6 +61,11 @@ def test_loop(dataloader, model, loss_fn, device) -> float:
 def test_loop_with_unrolling(
     dataloader_with_unrolling, model, loss_fn, device
 ) -> float:
+    horizon_size = dataloader_with_unrolling.dataset.__dict__.get(
+        "unrolling_horizon", 1
+    )
+    if horizon_size == 1:
+        return test_loop(dataloader_with_unrolling, model, loss_fn, device)
     model.eval()
     num_batches = len(dataloader_with_unrolling)
     acc_test_loss = 0
@@ -67,8 +77,8 @@ def test_loop_with_unrolling(
                 next_steps_true.to(device),
             )
             next_steps_pred = [input_val]
-            for _ in range(dataloader_with_unrolling.dataset.get_horizon_size()):
+            for _ in range(horizon_size):
                 next_steps_pred.append(model(next_steps_pred[-1]))
             next_steps_pred_torch = torch.concat(next_steps_pred[1:], dim=1)
             acc_test_loss += loss_fn(next_steps_pred_torch, next_steps_true).item()
-    return acc_test_loss / num_batches
+    return acc_test_loss / num_batches / horizon_size
