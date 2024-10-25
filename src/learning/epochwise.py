@@ -29,6 +29,7 @@ def train_loop_with_unrolling(
     model.train()
     num_batches = len(dataloader_with_unrolling)
     acc_train_loss = 0
+    # loss_hist = []
 
     for input_val, next_steps_true in dataloader_with_unrolling:
         input_val, next_steps_true = input_val.to(device), next_steps_true.to(device)
@@ -38,10 +39,13 @@ def train_loop_with_unrolling(
         next_steps_pred_torch = torch.concat(next_steps_pred[1:], dim=1)
         loss = loss_fn(next_steps_pred_torch, next_steps_true)
         acc_train_loss += loss.item()
+        # loss_hist.append(loss.item())
 
         loss.backward()
         optimizer.step()
         optimizer.zero_grad()
+    # with open("loss_hist.txt", "a") as f:
+    #     print(loss_hist, file=f)
     return acc_train_loss / num_batches / horizon_size
 
 
