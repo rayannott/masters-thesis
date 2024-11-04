@@ -9,6 +9,7 @@ def train_epoch_one_step(
     acc_train_loss = 0
 
     for X, y in dataloader:
+        optimizer.zero_grad()
         X, y = X.to(device), y.to(device)
         pred = model(X)
         loss = loss_fn(pred, y)
@@ -16,7 +17,6 @@ def train_epoch_one_step(
 
         loss.backward()
         optimizer.step()
-        optimizer.zero_grad()
     return acc_train_loss / num_batches, {}
 
 
@@ -36,6 +36,7 @@ def train_epoch_unrolled(
     loss_hist = []
 
     for input_val, next_steps_true in dataloader_with_unrolling:
+        optimizer.zero_grad()
         input_val, next_steps_true = input_val.to(device), next_steps_true.to(device)
         next_steps_pred = [input_val]
         for _ in range(horizon_size):
@@ -57,7 +58,6 @@ def train_epoch_unrolled(
         # acc_unr_loss.backward()
 
         optimizer.step()
-        optimizer.zero_grad()
     return acc_train_loss / num_batches / horizon_size, {"loss_hist": loss_hist}
 
 
