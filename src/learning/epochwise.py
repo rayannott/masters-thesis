@@ -42,20 +42,11 @@ def train_epoch_unrolled(
         for _ in range(horizon_size):
             next_steps_pred.append(model(next_steps_pred[-1]))
         next_steps_pred_torch = torch.concat(next_steps_pred[1:], dim=1)
+
         loss = loss_fn(next_steps_pred_torch, next_steps_true)
         acc_train_loss += loss.item()
         loss_hist.append(loss.item())
         loss.backward()
-
-        # a variant with scaling the gradients within the unrolling steps
-        # def factor(unroll_step):
-        #     return 1.0 / (unroll_step + 1)
-
-        # acc_unr_loss = torch.tensor(0.0, device=device, requires_grad=True)
-        # for unroll_step in range(horizon_size):
-        #     unr_loss = loss_fn(next_steps_pred_torch[unroll_step], next_steps_true[unroll_step])
-        #     acc_unr_loss += factor(unroll_step) * unr_loss
-        # acc_unr_loss.backward()
 
         optimizer.step()
     return acc_train_loss / num_batches / horizon_size, {"loss_hist": loss_hist}
