@@ -21,7 +21,7 @@ def train_epoch_one_step(
 
 
 def train_epoch_unrolled(
-    dataloader_with_unrolling, model, loss_fn, optimizer, device
+    dataloader_with_unrolling, model, loss_fn, optimizer, device, **kwargs
 ) -> tuple[float, dict]:
     horizon_size = dataloader_with_unrolling.dataset.__dict__.get(
         "unrolling_horizon", 1
@@ -35,12 +35,18 @@ def train_epoch_unrolled(
     acc_train_loss = 0
     loss_hist = []
 
+    detach_for: set[int] = kwargs.get("detach_for", set())
+
     for input_val, next_steps_true in dataloader_with_unrolling:
         optimizer.zero_grad()
         input_val, next_steps_true = input_val.to(device), next_steps_true.to(device)
         next_steps_pred = [input_val]
-        for _ in range(horizon_size):
-            next_steps_pred.append(model(next_steps_pred[-1]))
+        for unr_step_id in range(horizon_size):
+            next_steps_pred.append(
+                model(next_steps_pred[-1]).detach()
+                if unr_step_id in detach_for
+                else model(next_steps_pred[-1])
+            )
         next_steps_pred_torch = torch.concat(next_steps_pred[1:], dim=1)
 
         loss = loss_fn(next_steps_pred_torch, next_steps_true)
@@ -90,11 +96,11 @@ def test_epoch_unrolled(dataloader_with_unrolling, model, loss_fn, device) -> fl
 
 
 def train_epoch(
-    dataloader, model, loss_fn, optimizer, device, unrolling_horizon
+    dataloader, model, loss_fn, optimizer, device, unrolling_horizon, **kwargs
 ) -> tuple[float, dict]:
     if unrolling_horizon == 1:
         return train_epoch_one_step(dataloader, model, loss_fn, optimizer, device)
-    return train_epoch_unrolled(dataloader, model, loss_fn, optimizer, device)
+    return train_epoch_unrolled(dataloader, model, loss_fn, optimizer, device, **kwargs)
 
 
 def test_epoch(dataloader, model, loss_fn, device, unrolling_horizon) -> float:
