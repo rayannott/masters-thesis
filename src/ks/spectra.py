@@ -4,7 +4,11 @@ from scipy.signal import welch
 import plotly.graph_objects as go
 
 
-def get_welsh_psd(
+def get_spectrum(u: np.ndarray, resolution: int) -> np.ndarray:
+    return (np.abs(fft(u)) ** 2)[: resolution // 2]  # type: ignore
+
+
+def get_welsh_psd_fig(
     x_np: np.ndarray, u_traj_numpy: np.ndarray, resolution: int, num_points: int = 4
 ) -> go.Figure:
     fig = go.Figure()
@@ -32,7 +36,7 @@ def get_welsh_psd(
     return fig
 
 
-def get_energy_spectrum(
+def get_energy_spectrum_fig(
     u_traj_numpy: np.ndarray,
     resolution: int,
     domain_size: float,
