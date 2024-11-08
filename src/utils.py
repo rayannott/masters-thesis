@@ -2,6 +2,7 @@ from collections import deque
 from typing import TypeVar, Iterable, Generator
 from itertools import islice
 
+import torch
 
 T = TypeVar("T")
 
@@ -22,4 +23,13 @@ def sliding_window(iterable: Iterable[T], n) -> Generator[tuple[T, ...], None, N
         yield tuple(window)
 
 
-
+def train_test_split(
+    traj: list[torch.Tensor],
+    percent_train: float = 0.8,
+) -> tuple[list[torch.Tensor], list[torch.Tensor]]:
+    # TODO: problem with the training data being sampled from earlier times
+    n = len(traj)
+    n_train = int(n * percent_train)
+    train = traj[:n_train]
+    test = traj[n_train:]
+    return train, test

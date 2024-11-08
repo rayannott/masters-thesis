@@ -81,8 +81,8 @@ class DifferentiableKS:
             u_init = self.get_init()
         u_traj = [u_init]
         u_iter = u_init
-        for i in range(num_steps):
+        for i in range(num_steps+burn_in_steps):
             u_iter = self.etrk2(u_iter)
-            if i >= burn_in_steps:
+            if i > burn_in_steps:
                 u_traj.append(u_iter)
         return u_traj
