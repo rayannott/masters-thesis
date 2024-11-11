@@ -27,9 +27,10 @@ class MeanSquaredError(Metric):
 class LogSpectralDistance(Metric):
     _EPS = 1e-10
 
-    def __init__(self, p: int = 2) -> None:
+    def __init__(self, p: int = 2, mean_psd: torch.Tensor | None = None) -> None:
         super().__init__()
         self.p = p
+        self.mean_psd = mean_psd
 
     @classmethod
     def compute_psd(cls, signal: torch.Tensor) -> torch.Tensor:
@@ -38,11 +39,12 @@ class LogSpectralDistance(Metric):
         psd = torch.abs(fft_result) ** 2 / n
         return psd[: n // 2 + 1]
 
-    def __call__(self, y_true: torch.Tensor, y_pred: torch.Tensor) -> torch.Tensor:
+    def __call__(self, y_true: torch.Tensor, y_pred: torch.Tensor | None) -> torch.Tensor:
         psd1 = self.compute_psd(y_true)
-        psd2 = self.compute_psd(y_pred)
-        log_psd1 = torch.log10(psd1 + self._EPS)
-        log_psd2 = torch.log10(psd2 + self._EPS)
+        psd2 = self.compute_psd(y_pred) if y_pred is not None else self.mean_psd
+        assert psd2 is not None, "y_pred or mean_psd must be provided"
+        log_psd1 = torch.log(psd1 + self._EPS)
+        log_psd2 = torch.log(psd2 + self._EPS)
         return torch.norm(log_psd1 - log_psd2, p=self.p)
 
     def __repr__(self) -> str:
