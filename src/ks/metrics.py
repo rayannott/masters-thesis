@@ -31,7 +31,8 @@ class LogSpectralDistance(Metric):
         super().__init__()
         self.p = p
 
-    def compute_psd(self, signal: torch.Tensor) -> torch.Tensor:
+    @classmethod
+    def compute_psd(cls, signal: torch.Tensor) -> torch.Tensor:
         n = signal.shape[-1]
         fft_result = torch.fft.fft(signal, n=n)
         psd = torch.abs(fft_result) ** 2 / n
