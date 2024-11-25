@@ -1,5 +1,10 @@
 import torch
 
+from src.ks.lyapunov_exp import calculate_lyapunov_exponent_jac
+
+
+_calculate_lyapunov_exponent = False
+
 
 def train_epoch_one_step(
     dataloader, model, loss_fn, optimizer, device
@@ -7,6 +12,8 @@ def train_epoch_one_step(
     model.train()
     num_batches = len(dataloader)
     acc_train_loss = 0
+
+    info = {}
 
     for X, y in dataloader:
         optimizer.zero_grad()
@@ -17,7 +24,13 @@ def train_epoch_one_step(
 
         loss.backward()
         optimizer.step()
-    return acc_train_loss / num_batches, {}
+
+        if _calculate_lyapunov_exponent:
+            if "lambdas" not in info:
+                info["lambdas"] = []
+            lamb = calculate_lyapunov_exponent_jac(None, model, 96, device, 250, 50)
+            info["lambdas"].append(lamb)
+    return acc_train_loss / num_batches, info
 
 
 def train_epoch_unrolled(
