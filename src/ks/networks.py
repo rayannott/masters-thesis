@@ -119,6 +119,12 @@ class CircularCNN(nn.Module):
                 layers.append(nn.ReLU())
 
         self.deep_cnn = nn.Sequential(*layers)
+    
+    def apply_init(self, func, **kwargs):
+        def init_weights(m):
+            if isinstance(m, nn.Conv1d):
+                func(m.weight, **kwargs)
+        self.apply(init_weights)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = x.unsqueeze(1)
