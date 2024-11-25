@@ -3,13 +3,18 @@ from torch.autograd.functional import jacobian
 
 
 def calculate_lyapunov_exponent_jac(
-    u_init: torch.Tensor, solver, resolution: int, device: torch.device, num_steps: int = 1000, transient_steps: int = 100
+    u_init: torch.Tensor | None, solver, resolution: int, device: torch.device, num_steps: int = 1000, transient_steps: int = 100
 ) -> float:
     EPS = 1e-5
     if hasattr(solver, "eval"):
         solver.eval()
     else:
         print("solver does not have eval method")
+    
+    if u_init is None:
+        # a quarter cosine wave
+        u_init = torch.cos(torch.linspace(0, 2 * 3.1415, resolution)).to(device)
+
     epsilon = EPS * torch.randn_like(u_init).to(device)
     u_0 = u_init.unsqueeze(0).to(device)
 
