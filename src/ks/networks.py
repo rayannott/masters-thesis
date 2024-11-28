@@ -112,6 +112,7 @@ class CircularCNN(nn.Module):
                     kernel_size=self.kernel_size,
                     padding_mode="circular",
                     padding=self.kernel_size // 2,
+                    bias=i != (self.depth - 1),
                 )
             )
 
@@ -119,11 +120,12 @@ class CircularCNN(nn.Module):
                 layers.append(nn.ReLU())
 
         self.deep_cnn = nn.Sequential(*layers)
-    
+
     def apply_init(self, func, **kwargs):
         def init_weights(m):
             if isinstance(m, nn.Conv1d):
                 func(m.weight, **kwargs)
+
         self.apply(init_weights)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
