@@ -44,8 +44,8 @@ class LogSpectralDistance(Metric):
         cls, psd1: torch.Tensor, psd2: torch.Tensor, p: int
     ) -> torch.Tensor:
         assert psd2 is not None, "y_pred or mean_psd must be provided"
-        log_psd1 = torch.log(psd1 + cls._EPS)
-        log_psd2 = torch.log(psd2 + cls._EPS)
+        log_psd1 = torch.log(psd1 + cls._EPS).to(psd1.device)
+        log_psd2 = torch.log(psd2 + cls._EPS).to(psd2.device)
         return torch.norm(log_psd1 - log_psd2, p=p)
 
     def __call__(
