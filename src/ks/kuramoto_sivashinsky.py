@@ -35,7 +35,7 @@ class DifferentiableKS:
             (self.exp_lin - 1 - self.L_mat * dt) / (dt * self.L_mat**2),
         )
 
-    def etrk2(self, u):
+    def etrk2(self, u: torch.Tensor) -> torch.Tensor:
         if self.dealiasing:
             u = self.dealias(u)
         nonlin_current = self.calc_nonlinear(u)
