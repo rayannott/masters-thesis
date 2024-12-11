@@ -95,6 +95,7 @@ class CircularCNN(nn.Module):
         kernel_size: int = 3,
         depth: int = 5,
         num_channels: int = 16,
+        num_extra_in_channels: int = 0,
     ) -> None:
         super().__init__()
         self.resolution = resolution
@@ -104,7 +105,7 @@ class CircularCNN(nn.Module):
 
         layers = []
         for i in range(self.depth):
-            in_channels = 1 if i == 0 else self.num_channels
+            in_channels = (1 + num_extra_in_channels) if i == 0 else self.num_channels
             out_channels = 1 if i == self.depth - 1 else self.num_channels
 
             layers.append(
@@ -136,81 +137,15 @@ class CircularCNN(nn.Module):
         return x
 
 
-class CircularCNNWithDomainSize(nn.Module):
-    def __init__(
-        self,
-        resolution: int,
-        device: torch.device,
-        domain_size: float,
-        fourier_frequencies: list[float],
-        kernel_size: int = 3,
-        depth: int = 5,
-        num_channels: int = 16,
-    ) -> None:
-        super().__init__()
-        self.resolution = resolution
-        self.device = device
-        self.domain_size = domain_size
-        self.fourier_frequencies = fourier_frequencies
-        self.kernel_size = kernel_size
-        self.depth = depth
-        self.num_channels = num_channels
-
-        layers = []
-        for i in range(self.depth):
-            in_channels = (
-                (2 * len(self.fourier_frequencies) + 1) if i == 0 else self.num_channels
-            )
-            out_channels = 1 if i == self.depth - 1 else self.num_channels
-
-            layers.append(
-                nn.Conv1d(
-                    in_channels=in_channels,
-                    out_channels=out_channels,
-                    kernel_size=self.kernel_size,
-                    padding_mode="circular",
-                    padding=self.kernel_size // 2,
-                    bias=i != (self.depth - 1),
-                    device=self.device,
-                )
-            )
-
-            if i < self.depth - 1:
-                layers.append(nn.ReLU())
-
-        self.deep_cnn = nn.Sequential(*layers)
-
-    def set_domain_size(self, domain_size: float) -> None:
-        self.domain_size = domain_size
-
-    def apply_init(self, func, **kwargs):
-        def init_weights(m):
-            if isinstance(m, nn.Conv1d):
-                func(m.weight, **kwargs)
-
-        self.apply(init_weights)
-
-    @lru_cache
-    def fourier_features(self, domain_size: float) -> torch.Tensor:
-        grid = torch.linspace(0, domain_size, self.resolution)
-        features = []
-        # TODO: make periodic
-        for f in self.fourier_frequencies:
-            features.append(torch.sin(2 * torch.pi * f * grid))
-            features.append(torch.cos(2 * torch.pi * f * grid))
-        return torch.stack(features, dim=-1).to(self.device).T
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        batch_size = x.shape[0]
-        x = x.unsqueeze(1)
-        ff = (
-            self.fourier_features(self.domain_size)
-            .unsqueeze(0)
-            .expand(batch_size, -1, -1)
-        )
-        x_ff = torch.cat((x, ff), dim=1)
-        output = self.deep_cnn(x_ff)
-        return output.squeeze(1)
+@lru_cache
+def fourier_features(domain_size: float, resolution: int, frequencies: tuple[float, ...], device: torch.device) -> torch.Tensor:
+    grid = torch.linspace(0, domain_size, resolution)
+    features = []
+    # TODO: make periodic
+    for f in frequencies:
+        features.append(torch.sin(2 * torch.pi * f * grid))
+        features.append(torch.cos(2 * torch.pi * f * grid))
+    return torch.stack(features, dim=-1).to(device)
 
 
 class ResidualBlock(nn.Module):
