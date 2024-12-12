@@ -95,6 +95,71 @@ class CircularCNN(nn.Module):
         kernel_size: int = 3,
         depth: int = 5,
         num_channels: int = 16,
+    ) -> None:
+        super().__init__()
+        self.resolution = resolution
+        self.kernel_size = kernel_size
+        self.depth = depth
+        self.num_channels = num_channels
+
+        layers = []
+        for i in range(self.depth):
+            in_channels = 1 if i == 0 else self.num_channels
+            out_channels = 1 if i == self.depth - 1 else self.num_channels
+
+            layers.append(
+                nn.Conv1d(
+                    in_channels=in_channels,
+                    out_channels=out_channels,
+                    kernel_size=self.kernel_size,
+                    padding_mode="circular",
+                    padding=self.kernel_size // 2,
+                    bias=i != (self.depth - 1),
+                )
+            )
+
+            if i < self.depth - 1:
+                layers.append(nn.ReLU())
+
+        self.deep_cnn = nn.Sequential(*layers)
+
+    def apply_init(self, func, **kwargs):
+        def init_weights(m):
+            if isinstance(m, nn.Conv1d):
+                func(m.weight, **kwargs)
+
+        self.apply(init_weights)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # TODO: this is bad; add the channel dimension in the dataset
+        x = x.unsqueeze(1)
+        x = self.deep_cnn(x).squeeze(1)
+        return x
+
+
+@lru_cache
+def fourier_features(
+    domain_size: float,
+    resolution: int,
+    frequencies: tuple[float, ...],
+    device: torch.device,
+) -> torch.Tensor:
+    grid = torch.linspace(0, domain_size, resolution)
+    features = []
+    # TODO: make periodic
+    for f in frequencies:
+        features.append(torch.sin(2 * torch.pi * f * grid))
+        features.append(torch.cos(2 * torch.pi * f * grid))
+    return torch.stack(features, dim=-1).to(device)
+
+
+class CircularCNNDomainSizes(nn.Module):
+    def __init__(
+        self,
+        resolution: int,
+        kernel_size: int = 3,
+        depth: int = 5,
+        num_channels: int = 16,
         num_extra_in_channels: int = 0,
     ) -> None:
         super().__init__()
@@ -132,20 +197,7 @@ class CircularCNN(nn.Module):
         self.apply(init_weights)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = x.unsqueeze(1)
-        x = self.deep_cnn(x).squeeze(1)
-        return x
-
-
-@lru_cache
-def fourier_features(domain_size: float, resolution: int, frequencies: tuple[float, ...], device: torch.device) -> torch.Tensor:
-    grid = torch.linspace(0, domain_size, resolution)
-    features = []
-    # TODO: make periodic
-    for f in frequencies:
-        features.append(torch.sin(2 * torch.pi * f * grid))
-        features.append(torch.cos(2 * torch.pi * f * grid))
-    return torch.stack(features, dim=-1).to(device)
+        return self.deep_cnn(x)
 
 
 class ResidualBlock(nn.Module):
