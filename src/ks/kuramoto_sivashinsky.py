@@ -85,4 +85,4 @@ class DifferentiableKS:
             u_iter = self.etrk2(u_iter)
             if i > burn_in_steps:
                 u_traj.append(u_iter)
-        return u_traj
+        return u_traj[1:]
