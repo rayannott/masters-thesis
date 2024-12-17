@@ -198,40 +198,40 @@ class CircularCNNDomainSizes(nn.Module):
 
 
 class ResidualBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size=3):
-        super(ResidualBlock, self).__init__()
+    def __init__(self, in_ch: int, hidden_ch: int, out_ch: int, kernel_size=3):
+        super().__init__()
         self.conv1 = nn.Conv1d(
-            in_channels=in_channels,
-            out_channels=out_channels,
+            in_channels=in_ch,
+            out_channels=hidden_ch,
             kernel_size=kernel_size,
             padding=kernel_size // 2,
             padding_mode="circular",
         )
-        self.bn1 = nn.BatchNorm1d(out_channels)
+        self.bn1 = nn.BatchNorm1d(hidden_ch)
         self.relu = nn.ReLU(inplace=True)  # should I use inplace=True?
         self.conv2 = nn.Conv1d(
-            in_channels=out_channels,
-            out_channels=out_channels,
+            in_channels=hidden_ch,
+            out_channels=out_ch,
             kernel_size=kernel_size,
             padding=kernel_size // 2,
             padding_mode="circular",
         )
-        self.bn2 = nn.BatchNorm1d(out_channels)
+        self.bn2 = nn.BatchNorm1d(out_ch)
 
-        self.skip = nn.Conv1d(in_channels, out_channels, kernel_size=1)
-
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         residual = x
+        # TODO: RuntimeError: The size of tensor a (16) must match the size of tensor b (2) at non-singleton dimension 1
+
         out = self.conv1(x)
-        out = self.relu(out)  # what order should I use here?
         out = self.bn1(out)
+        out = self.relu(out)  # what order should I use here?
+
         out = self.conv2(out)
         out = self.bn2(out)
 
-        residual = self.skip(residual)
-
         out += residual
         out = self.relu(out)
+
         return out
 
 
@@ -242,8 +242,9 @@ class ResNet1D(nn.Module):
         kernel_size: int = 3,
         depth: int = 5,
         num_channels: int = 16,
+        num_extra_in_channels: int = 0,
     ):
-        super(ResNet1D, self).__init__()
+        super().__init__()
         self.resolution = resolution
         self.kernel_size = kernel_size
         self.depth = depth
@@ -251,36 +252,39 @@ class ResNet1D(nn.Module):
 
         layers = []
 
-        layers.append(
-            nn.Conv1d(
-                in_channels=1,
-                out_channels=num_channels,
-                kernel_size=self.kernel_size,
-                padding=self.kernel_size // 2,
-                padding_mode="circular",
-            )
-        )
-        layers.append(nn.ReLU())
-        layers.append(nn.BatchNorm1d(num_channels))
+        # layers.append(
+        #     nn.Conv1d(
+        #         in_channels=1 + num_extra_in_channels,
+        #         out_channels=num_channels,
+        #         kernel_size=self.kernel_size,
+        #         padding=self.kernel_size // 2,
+        #         padding_mode="circular",
+        #     )
+        # )
+        # layers.append(nn.ReLU())
+        # # layers.append(nn.BatchNorm1d(num_channels))
 
-        for _ in range(self.depth):
+        for i in range(self.depth):
             layers.append(
-                ResidualBlock(num_channels, num_channels, kernel_size=self.kernel_size)
+                ResidualBlock(
+                    in_ch=(1 + num_extra_in_channels) if i == 0 else num_channels,
+                    hidden_ch=num_channels,
+                    out_ch=num_channels if i < self.depth - 1 else 1,
+                    kernel_size=self.kernel_size,
+                )
             )
 
-        layers.append(
-            nn.Conv1d(
-                in_channels=num_channels,
-                out_channels=1,
-                kernel_size=self.kernel_size,
-                padding=self.kernel_size // 2,
-                padding_mode="circular",
-            )
-        )
+        # layers.append(
+        #     nn.Conv1d(
+        #         in_channels=num_channels,
+        #         out_channels=1,
+        #         kernel_size=self.kernel_size,
+        #         padding=self.kernel_size // 2,
+        #         padding_mode="circular",
+        #     )
+        # )
 
-        self.deep_cnn = nn.Sequential(*layers)
+        self.dnn = nn.Sequential(*layers)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = x.unsqueeze(1)
-        x = self.deep_cnn(x).squeeze(1)
-        return x
+        return self.dnn(x)

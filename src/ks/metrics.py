@@ -151,10 +151,8 @@ def evaluate_model_cum_mse_with_ds(
     def model_f(u: torch.Tensor) -> torch.Tensor:
         return model.forward(domain_encoding_func(u, domain_size).T)[0, :]
 
-    def stop_early(u_pred: torch.Tensor) -> bool:
-        return bool(torch.isnan(u_pred).any().item()) or bool(
-            torch.isinf(u_pred).any().item()
-        ) or bool(torch.any(u_pred > 1e3).item())
+    def err(u1: torch.Tensor, u2: torch.Tensor) -> float:
+        return ((u1 - u2) ** 2).mean().item()
 
     u_pred_traj = [u_init]
 
@@ -165,18 +163,32 @@ def evaluate_model_cum_mse_with_ds(
     u_pred_traj.append(model_f(u_pred_traj[-1]))
 
     ok = True
+    reason = ''
     errors: list[float] = []
 
     for _ in range(n_steps_future - 1):
         u1, u2 = u_pred_traj[-2:]
+        if err(u1, u2) < 1e-4:
+            reason = "Prediction is stuck; stopping early"
+            ok = False
+            break
         u2_solv = solver_ks.etrk2(u1)
-        errors.append(((u2_solv - u2) ** 2).mean().item())
+        if (_new_err:=err(u2_solv, u2)) > 1e-1:
+            reason = f"Error is too large: {_new_err}"
+            ok = False
+            break
+        errors.append(_new_err)
+
         new_val = model_f(u2)
         u_pred_traj.append(new_val)
 
-        if stop_early(new_val):
+        if (
+            bool(torch.isnan(new_val).any().item())
+            or bool(torch.isinf(new_val).any().item())
+            or bool(torch.any(new_val > 1e3).item())
+        ):
             ok = False
             break
 
-    info = {"errors": errors, "traj_pred": u_pred_traj, "ok": ok}
+    info = {"errors": errors, "traj_pred": u_pred_traj, "ok": ok, "reason": reason}
     return mean(errors) / solver_ks.dt if ok else torch.inf, info
