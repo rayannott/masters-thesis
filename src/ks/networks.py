@@ -131,10 +131,7 @@ class CircularCNN(nn.Module):
         self.apply(init_weights)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # TODO: this is bad; add the channel dimension in the dataset
-        x = x.unsqueeze(1)
-        x = self.deep_cnn(x).squeeze(1)
-        return x
+        return self.deep_cnn(x)
 
 
 @lru_cache

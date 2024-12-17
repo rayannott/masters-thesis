@@ -12,7 +12,9 @@ class KSDataset(Dataset):
         self,
         trajectory: list[torch.Tensor],
     ):
-        self.xy_pairs = list(pairwise(trajectory))
+        self.xy_pairs: list[tuple[torch.Tensor, torch.Tensor]] = []
+        for X, y in pairwise(trajectory):
+            self.xy_pairs.append((X.unsqueeze(0), y.unsqueeze(0)))
         shuffle(self.xy_pairs)
 
     def __getitem__(self, index) -> tuple[torch.Tensor, torch.Tensor]:
@@ -20,7 +22,7 @@ class KSDataset(Dataset):
 
     def __len__(self) -> int:
         return len(self.xy_pairs)
-    
+
     def get_horizon_size(self) -> int:
         return 1
 

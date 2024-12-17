@@ -7,6 +7,7 @@ metrics:
 
 from abc import ABC, abstractmethod
 from statistics import mean
+from typing import Callable
 
 import torch
 
@@ -110,6 +111,58 @@ def evaluate_model_cum_mse(
     u_pred_traj = [u_pred_traj[-1]]
     u_pred_traj.append(model_f(u_pred_traj[-1]))
 
+    ok = True
+    errors: list[float] = []
+
+    for _ in range(n_steps_future - 1):
+        u1, u2 = u_pred_traj[-2:]
+        u2_solv = solver_ks.etrk2(u1)
+        errors.append(((u2_solv - u2) ** 2).mean().item())
+        new_val = model_f(u2)
+        u_pred_traj.append(new_val)
+
+        if stop_early(new_val):
+            ok = False
+            break
+
+    info = {"errors": errors, "traj_pred": u_pred_traj, "ok": ok}
+    return mean(errors) / solver_ks.dt if ok else torch.inf, info
+
+
+def evaluate_model_cum_mse_with_ds(
+    u_init: torch.Tensor,
+    model: torch.nn.Module,
+    solver_ks: DifferentiableKS,
+    n_steps_future: int,
+    burn_in_steps: int,
+    domain_encoding_func: Callable[[torch.Tensor, float], torch.Tensor],
+    domain_size: float,
+) -> tuple[float, dict]:
+    """
+    Evaluate the cumulative mean squared error of the model's autoregressive prediction.
+
+    Returns the cumulative mean squared error and an
+    info dictionary containing
+    - the errors,
+    - the predicted trajectory and
+    - whether the evaluation was successful.
+    """
+
+    def model_f(u: torch.Tensor) -> torch.Tensor:
+        return model.forward(domain_encoding_func(u, domain_size).T)[0, :]
+
+    def stop_early(u_pred: torch.Tensor) -> bool:
+        return bool(torch.isnan(u_pred).any().item()) or bool(
+            torch.isinf(u_pred).any().item()
+        ) or bool(torch.any(u_pred > 1e3).item())
+
+    u_pred_traj = [u_init]
+
+    for _ in range(burn_in_steps):
+        u_pred_traj.append(solver_ks.etrk2(u_pred_traj[-1]))
+
+    u_pred_traj = [u_pred_traj[-1]]
+    u_pred_traj.append(model_f(u_pred_traj[-1]))
 
     ok = True
     errors: list[float] = []
