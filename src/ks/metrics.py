@@ -149,7 +149,9 @@ def evaluate_model_cum_mse_with_ds(
     """
 
     def model_f(u: torch.Tensor) -> torch.Tensor:
-        return model.forward(domain_encoding_func(u, domain_size).T)[0, :]
+        return model.forward(domain_encoding_func(u, domain_size).T.unsqueeze(0))[
+            0, 0, :
+        ]
 
     def err(u1: torch.Tensor, u2: torch.Tensor) -> float:
         return ((u1 - u2) ** 2).mean().item()
@@ -163,7 +165,7 @@ def evaluate_model_cum_mse_with_ds(
     u_pred_traj.append(model_f(u_pred_traj[-1]))
 
     ok = True
-    reason = ''
+    reason = ""
     errors: list[float] = []
 
     for _ in range(n_steps_future - 1):
@@ -173,7 +175,7 @@ def evaluate_model_cum_mse_with_ds(
             ok = False
             break
         u2_solv = solver_ks.etrk2(u1)
-        if (_new_err:=err(u2_solv, u2)) > 1e-1:
+        if (_new_err := err(u2_solv, u2)) > 1e-1:
             reason = f"Error is too large: {_new_err}"
             ok = False
             break

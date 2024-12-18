@@ -154,6 +154,7 @@ class CircularCNNDomainSizes(nn.Module):
     def __init__(
         self,
         resolution: int,
+        device: torch.device,
         kernel_size: int = 3,
         depth: int = 5,
         num_channels: int = 16,
@@ -161,6 +162,7 @@ class CircularCNNDomainSizes(nn.Module):
     ) -> None:
         super().__init__()
         self.resolution = resolution
+        self.device = device
         self.kernel_size = kernel_size
         self.depth = depth
         self.num_channels = num_channels
@@ -178,6 +180,7 @@ class CircularCNNDomainSizes(nn.Module):
                     padding_mode="circular",
                     padding=self.kernel_size // 2,
                     bias=i != (self.depth - 1),
+                    device=self.device,
                 )
             )
 
@@ -198,7 +201,14 @@ class CircularCNNDomainSizes(nn.Module):
 
 
 class ResidualBlock(nn.Module):
-    def __init__(self, in_ch: int, hidden_ch: int, out_ch: int, kernel_size=3):
+    def __init__(
+        self,
+        in_ch: int,
+        hidden_ch: int,
+        out_ch: int,
+        device: torch.device,
+        kernel_size=3,
+    ):
         super().__init__()
         self.conv1 = nn.Conv1d(
             in_channels=in_ch,
@@ -206,25 +216,34 @@ class ResidualBlock(nn.Module):
             kernel_size=kernel_size,
             padding=kernel_size // 2,
             padding_mode="circular",
+            device=device,
         )
-        self.bn1 = nn.BatchNorm1d(hidden_ch)
-        self.relu = nn.ReLU(inplace=True)  # should I use inplace=True?
+        self.bn1 = nn.BatchNorm1d(hidden_ch, device=device)
+        self.relu = nn.ReLU(inplace=True)
         self.conv2 = nn.Conv1d(
             in_channels=hidden_ch,
             out_channels=out_ch,
             kernel_size=kernel_size,
             padding=kernel_size // 2,
             padding_mode="circular",
+            device=device,
         )
-        self.bn2 = nn.BatchNorm1d(out_ch)
+        self.bn2 = nn.BatchNorm1d(out_ch, device=device)
+
+        self.shortcut = (
+            nn.Conv1d(
+                in_channels=in_ch, out_channels=out_ch, kernel_size=1, device=device
+            )
+            if in_ch != out_ch
+            else nn.Identity()
+        )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        residual = x
-        # TODO: RuntimeError: The size of tensor a (16) must match the size of tensor b (2) at non-singleton dimension 1
+        residual = self.shortcut(x)
 
         out = self.conv1(x)
         out = self.bn1(out)
-        out = self.relu(out)  # what order should I use here?
+        out = self.relu(out)
 
         out = self.conv2(out)
         out = self.bn2(out)
@@ -239,6 +258,7 @@ class ResNet1D(nn.Module):
     def __init__(
         self,
         resolution: int,
+        device: torch.device,
         kernel_size: int = 3,
         depth: int = 5,
         num_channels: int = 16,
@@ -246,23 +266,12 @@ class ResNet1D(nn.Module):
     ):
         super().__init__()
         self.resolution = resolution
+        self.device = device
         self.kernel_size = kernel_size
         self.depth = depth
         self.num_channels = num_channels
 
         layers = []
-
-        # layers.append(
-        #     nn.Conv1d(
-        #         in_channels=1 + num_extra_in_channels,
-        #         out_channels=num_channels,
-        #         kernel_size=self.kernel_size,
-        #         padding=self.kernel_size // 2,
-        #         padding_mode="circular",
-        #     )
-        # )
-        # layers.append(nn.ReLU())
-        # # layers.append(nn.BatchNorm1d(num_channels))
 
         for i in range(self.depth):
             layers.append(
@@ -271,20 +280,100 @@ class ResNet1D(nn.Module):
                     hidden_ch=num_channels,
                     out_ch=num_channels if i < self.depth - 1 else 1,
                     kernel_size=self.kernel_size,
+                    device=self.device,
                 )
             )
-
-        # layers.append(
-        #     nn.Conv1d(
-        #         in_channels=num_channels,
-        #         out_channels=1,
-        #         kernel_size=self.kernel_size,
-        #         padding=self.kernel_size // 2,
-        #         padding_mode="circular",
-        #     )
-        # )
 
         self.dnn = nn.Sequential(*layers)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.dnn(x)
+
+
+class ResidualBlockV2(nn.Module):
+    def __init__(self, channels, kernel_size=3, padding_mode="circular", use_bias=True):
+        super().__init__()
+        self.conv1 = nn.Conv1d(
+            channels,
+            channels,
+            kernel_size=kernel_size,
+            padding=kernel_size // 2,
+            padding_mode=padding_mode,
+            bias=use_bias,
+        )
+        self.bn1 = nn.BatchNorm1d(channels)
+        self.relu1 = nn.LeakyReLU(inplace=True)
+        self.conv2 = nn.Conv1d(
+            channels,
+            channels,
+            kernel_size=kernel_size,
+            padding=kernel_size // 2,
+            padding_mode=padding_mode,
+            bias=use_bias,
+        )
+        self.bn2 = nn.BatchNorm1d(channels)
+        self.relu2 = nn.LeakyReLU(inplace=True)
+
+    def forward(self, x):
+        residual = x
+        out = self.conv1(x)
+        out = self.bn1(out)
+        out = self.relu1(out)
+        out = self.conv2(out)
+        out = self.bn2(out)
+        out += residual
+        out = self.relu2(out)
+        return out
+
+
+class ResNet1DV2(nn.Module):
+    def __init__(
+        self,
+        input_channels,
+        output_channels,
+        res_net_channels,
+        res_net_depth,
+        kernel_size=3,
+        padding_mode="circular",
+        use_bias=True,
+    ):
+        super().__init__()
+
+        self.upsample = nn.Sequential(
+            nn.Conv1d(
+                input_channels,
+                res_net_channels,
+                kernel_size=kernel_size,
+                padding=kernel_size // 2,
+                padding_mode=padding_mode,
+                bias=use_bias,
+            ),
+            nn.BatchNorm1d(res_net_channels),
+            nn.LeakyReLU(inplace=True),
+        )
+
+        self.residual_blocks = nn.Sequential(
+            *[
+                ResidualBlockV2(res_net_channels, kernel_size, padding_mode, use_bias)
+                for _ in range(res_net_depth)
+            ]
+        )
+
+        self.downsample = nn.Sequential(
+            nn.Conv1d(
+                res_net_channels,
+                output_channels,
+                kernel_size=kernel_size,
+                padding=kernel_size // 2,
+                padding_mode=padding_mode,
+                bias=use_bias,
+            ),
+            nn.BatchNorm1d(output_channels),
+            nn.LeakyReLU(inplace=True),
+        )
+
+    def forward(self, x):
+        x = self.upsample(x)
+        x = self.residual_blocks(x)
+        x = self.downsample(x)
+        return x
